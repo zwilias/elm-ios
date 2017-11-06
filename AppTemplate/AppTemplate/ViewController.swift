@@ -24,12 +24,11 @@ class ViewController: UIViewController {
             layout.height = YGValue(containerSize.height)
         }
         
-        // launch Elm program once everything is loaded
-        self.initJsContext()
-        
         jsQueue.async {
+            // Setup all the requisite JS stuff
             self.initJsContext()
             
+            // launch Elm program once everything is loaded
             _ = self.jsContext
                 .objectForKeyedSubscript("Elm")
                 .objectForKeyedSubscript("Main")
