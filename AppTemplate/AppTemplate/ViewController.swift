@@ -28,7 +28,9 @@ class ViewController: UIViewController {
         self.initJsContext()
         
         jsQueue.async {
-            _ = self.jsContext?
+            self.initJsContext()
+            
+            _ = self.jsContext
                 .objectForKeyedSubscript("Elm")
                 .objectForKeyedSubscript("Main")
                 .objectForKeyedSubscript("start")
@@ -47,89 +49,87 @@ class ViewController: UIViewController {
     }
     
     private func initJsContext() {
-        jsQueue.async {
-            let context: JSContext = JSContext()
-            
-            // expose initialRender and applyPatches to JS global context
-            let initialRender: @convention(block) ([String : Any], [[String : Any]]) -> Void = { (view, handlerList) in
-                let handlerList = handlerList
-                DispatchQueue.main.async {
-                    Renderer.initialRender(view: view, handlers: handlerList)
-                }
+        let context: JSContext = JSContext()
+        
+        // expose initialRender and applyPatches to JS global context
+        let initialRender: @convention(block) ([String : Any], [[String : Any]]) -> Void = { (view, handlerList) in
+            let handlerList = handlerList
+            DispatchQueue.main.async {
+                Renderer.initialRender(view: view, handlers: handlerList)
             }
-            context.setObject(initialRender, forKeyedSubscript: "initialRender" as (NSCopying & NSObjectProtocol)!)
-            
-            let applyPatches: @convention(block) ([String : Any]) -> Void = { (patches) in
-                var patches = patches
-                
-                DispatchQueue.main.async {
-                    Renderer.applyPatches(&patches)
-                }
-            }
-            context.setObject(applyPatches, forKeyedSubscript: "applyPatches" as (NSCopying & NSObjectProtocol)!)
-            
-            // expose Swift implementations of setTimeout, setInterval, and clearInterval to JS global context
-            let setTimeout: @convention(block) (JSValue, Double) -> Void = { (function, timeout) in
-                let (id, timer) = ViewController.timer(on: self.jsQueue)
-                
-                timer.setEventHandler {
-                    function.call(withArguments: [])
-                    ViewController.timerRegistry.removeValue(forKey: id)
-                }
-                timer.scheduleOneshot(deadline: DispatchTime.now() + timeout)
-                timer.resume()
-            }
-            context.setObject(setTimeout, forKeyedSubscript: "setTimeout" as (NSCopying & NSObjectProtocol)!)
-            
-            let setInterval: @convention(block) (JSValue, Double) -> Int = { (function, interval) in
-                let (id, timer) = ViewController.timer(on: self.jsQueue)
-                timer.scheduleRepeating(deadline: DispatchTime.now(), interval: interval / 1000.0)
-                
-                timer.setEventHandler {
-                    function.call(withArguments: [])
-                }
-                
-                timer.resume()
-                
-                return id
-            }
-            context.setObject(setInterval, forKeyedSubscript: "setInterval" as (NSCopying & NSObjectProtocol)!)
-            
-            let clearInterval: @convention(block) (Int) -> Void = { id in
-                if let timer = ViewController.timerRegistry[id] {
-                    timer.cancel()
-                    ViewController.timerRegistry.removeValue(forKey: id)
-                }
-            }
-            context.setObject(clearInterval, forKeyedSubscript: "clearInterval" as (NSCopying & NSObjectProtocol)!)
-            
-            // expose Swift implementations of console.* to JS global context
-            let consoleLog: @convention(block) (String) -> Void = { message in
-                print("JS Console: " + message)
-            }
-            
-            context.setObject([:], forKeyedSubscript: "console" as (NSCopying & NSObjectProtocol)!)
-            context.objectForKeyedSubscript("console").setObject(consoleLog, forKeyedSubscript: "log" as (NSCopying & NSObjectProtocol)!)
-            
-            // log JS exceptions
-            context.exceptionHandler = { context, exception in
-                print("JS Error: \(exception?.description ?? "unknown error")")
-            }
-            
-            // load compiled Elm program
-            guard let appJsPath = Bundle.main.path(forResource: "compiledElm", ofType: "js") else {
-                return
-            }
-            
-            do {
-                let app = try String(contentsOfFile: appJsPath, encoding: String.Encoding.utf8)
-                _ = context.evaluateScript(app)
-            } catch (let error) {
-                print("Error while processing script file: \(error)")
-            }
-            
-            self.jsContext = context
         }
+        context.setObject(initialRender, forKeyedSubscript: "initialRender" as (NSCopying & NSObjectProtocol)!)
+        
+        let applyPatches: @convention(block) ([String : Any]) -> Void = { (patches) in
+            var patches = patches
+            
+            DispatchQueue.main.async {
+                Renderer.applyPatches(&patches)
+            }
+        }
+        context.setObject(applyPatches, forKeyedSubscript: "applyPatches" as (NSCopying & NSObjectProtocol)!)
+        
+        // expose Swift implementations of setTimeout, setInterval, and clearInterval to JS global context
+        let setTimeout: @convention(block) (JSValue, Double) -> Void = { (function, timeout) in
+            let (id, timer) = ViewController.timer(on: self.jsQueue)
+            
+            timer.setEventHandler {
+                function.call(withArguments: [])
+                ViewController.timerRegistry.removeValue(forKey: id)
+            }
+            timer.scheduleOneshot(deadline: DispatchTime.now() + timeout)
+            timer.resume()
+        }
+        context.setObject(setTimeout, forKeyedSubscript: "setTimeout" as (NSCopying & NSObjectProtocol)!)
+        
+        let setInterval: @convention(block) (JSValue, Double) -> Int = { (function, interval) in
+            let (id, timer) = ViewController.timer(on: self.jsQueue)
+            timer.scheduleRepeating(deadline: DispatchTime.now(), interval: interval / 1000.0)
+            
+            timer.setEventHandler {
+                function.call(withArguments: [])
+            }
+            
+            timer.resume()
+            
+            return id
+        }
+        context.setObject(setInterval, forKeyedSubscript: "setInterval" as (NSCopying & NSObjectProtocol)!)
+        
+        let clearInterval: @convention(block) (Int) -> Void = { id in
+            if let timer = ViewController.timerRegistry[id] {
+                timer.cancel()
+                ViewController.timerRegistry.removeValue(forKey: id)
+            }
+        }
+        context.setObject(clearInterval, forKeyedSubscript: "clearInterval" as (NSCopying & NSObjectProtocol)!)
+        
+        // expose Swift implementations of console.* to JS global context
+        let consoleLog: @convention(block) (String) -> Void = { message in
+            print("JS Console: " + message)
+        }
+        
+        context.setObject([:], forKeyedSubscript: "console" as (NSCopying & NSObjectProtocol)!)
+        context.objectForKeyedSubscript("console").setObject(consoleLog, forKeyedSubscript: "log" as (NSCopying & NSObjectProtocol)!)
+        
+        // log JS exceptions
+        context.exceptionHandler = { context, exception in
+            print("JS Error: \(exception?.description ?? "unknown error")")
+        }
+        
+        // load compiled Elm program
+        guard let appJsPath = Bundle.main.path(forResource: "compiledElm", ofType: "js") else {
+            return
+        }
+        
+        do {
+            let app = try String(contentsOfFile: appJsPath, encoding: String.Encoding.utf8)
+            _ = context.evaluateScript(app)
+        } catch (let error) {
+            print("Error while processing script file: \(error)")
+        }
+        
+        self.jsContext = context
     }
     
     // recompute the layout when the device is rotated
@@ -154,7 +154,7 @@ class ViewController: UIViewController {
     // Swift interface for the handleEvent JS function that manages callbacks
     func handleEvent(id: UInt64, name: String, data: Any) {
         jsQueue.async {
-            _ = self.jsContext?
+            _ = self.jsContext
                 .objectForKeyedSubscript("Elm")
                 .objectForKeyedSubscript("Main")
                 .objectForKeyedSubscript("handleEvent")
