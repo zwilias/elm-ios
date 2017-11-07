@@ -69,39 +69,44 @@ class ViewController: UIViewController {
         context.setObject(applyPatches, forKeyedSubscript: "applyPatches" as (NSCopying & NSObjectProtocol)!)
         
         // expose Swift implementations of setTimeout, setInterval, and clearInterval to JS global context
-        let setTimeout: @convention(block) (JSValue, Double) -> Void = { (function, timeout) in
+        let setTimeout: @convention(block) (JSValue, Double) -> Int = { (function, timeout) in
             let (id, timer) = ViewController.timer(on: self.jsQueue)
             
             timer.setEventHandler {
                 function.call(withArguments: [])
                 ViewController.timerRegistry.removeValue(forKey: id)
             }
+            
             timer.scheduleOneshot(deadline: DispatchTime.now() + timeout)
             timer.resume()
+            
+            return id
         }
         context.setObject(setTimeout, forKeyedSubscript: "setTimeout" as (NSCopying & NSObjectProtocol)!)
         
         let setInterval: @convention(block) (JSValue, Double) -> Int = { (function, interval) in
             let (id, timer) = ViewController.timer(on: self.jsQueue)
-            timer.scheduleRepeating(deadline: DispatchTime.now(), interval: interval / 1000.0)
             
             timer.setEventHandler {
                 function.call(withArguments: [])
             }
             
+            timer.scheduleRepeating(deadline: DispatchTime.now(), interval: interval / 1000.0)
             timer.resume()
             
             return id
         }
         context.setObject(setInterval, forKeyedSubscript: "setInterval" as (NSCopying & NSObjectProtocol)!)
         
-        let clearInterval: @convention(block) (Int) -> Void = { id in
+        let clearTimer: @convention(block) (Int) -> Void = { id in
             if let timer = ViewController.timerRegistry[id] {
                 timer.cancel()
                 ViewController.timerRegistry.removeValue(forKey: id)
             }
         }
-        context.setObject(clearInterval, forKeyedSubscript: "clearInterval" as (NSCopying & NSObjectProtocol)!)
+        
+        context.setObject(clearTimer, forKeyedSubscript: "clearInterval" as (NSCopying & NSObjectProtocol)!)
+        context.setObject(clearTimer, forKeyedSubscript: "clearTimeout" as (NSCopying & NSObjectProtocol)!)
         
         // expose Swift implementations of console.* to JS global context
         let consoleLog: @convention(block) (String) -> Void = { message in
